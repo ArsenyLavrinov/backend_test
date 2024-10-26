@@ -24,10 +24,8 @@ def start_bot(message):
         user_intervals.pop(message.chat.id)
 
     bot.send_message(message.chat.id, "Привет!")
-    get_city_msg = bot.send_message(
-        message.chat.id, "Напиши название города для получения погоды"
-    )
-    bot.register_next_step_handler(get_city_msg, lambda msg: new_location(msg))
+    bot.send_message(message.chat.id, "Напиши название города для получения погоды")
+    # bot.register_next_step_handler(get_city_msg, lambda msg: new_location(msg))
     bot.send_message(message.chat.id, "Введите /help для получения информации")
 
 
@@ -121,6 +119,8 @@ def set_interval(message):
         elif interval == "6 часов":
             seconds = 21600
         user_intervals[chat_id] = seconds
+        print(chat_id, seconds, message.text)
+        print(weather_info[chat_id])
         bot.send_message(
             chat_id,
             f"Интервал установлен: {interval}. Погода будет отправляться с этим интервалом.",
