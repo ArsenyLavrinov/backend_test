@@ -17,8 +17,17 @@ user_intervals = {}
 
 @bot.message_handler(commands=["start"])
 def start_bot(message):
+    if message.chat.id in weather_info:
+        weather_info.pop(message.chat.id)
+
+    if message.chat.id in user_intervals:
+        user_intervals.pop(message.chat.id)
+
     bot.send_message(message.chat.id, "Привет!")
-    bot.send_message(message.chat.id, "Напиши название города для получения погоды")
+    get_city_msg = bot.send_message(
+        message.chat.id, "Напиши название города для получения погоды"
+    )
+    bot.register_next_step_handler(get_city_msg, lambda msg: new_location(msg))
     bot.send_message(message.chat.id, "Введите /help для получения информации")
 
 
@@ -30,7 +39,10 @@ def help_bot(message):
 Команды:
 /weather - получить погоду на сейчас
 /location - изменить город
-/interval - изменить интервал""",
+/interval - изменить интервал
+/stop - остановить уведомления
+
+""",
     )
 
 
@@ -56,34 +68,36 @@ def new_location(message):
             msg, lambda msg: update_weather_info(msg, chat_id)
         )
     else:
-        bot.send_message(chat_id, "Город еще не установлен!")
+        msg = bot.send_message(chat_id, "Пришлите название города!")
+        bot.register_next_step_handler(
+            msg, lambda msg: update_weather_info(msg, chat_id)
+        )
 
 
 @bot.message_handler(commands=["interval"])
 def new_interval(message):
     chat_id = message.chat.id
     if chat_id in user_intervals:
-        markup = types.ReplyKeyboardMarkup()
-        btn1 = types.KeyboardButton("1 минута")
-        btn2 = types.KeyboardButton("1 час")
-        btn3 = types.KeyboardButton("3 часа")
-        btn4 = types.KeyboardButton("6 часов")
-        markup.add(btn1, btn2, btn3, btn4)
+        markup = create_interval_keyboard()
         msg = bot.send_message(chat_id, "Выберите новый интервал", reply_markup=markup)
         bot.register_next_step_handler(
             msg, lambda msg: update_interval_info(msg, chat_id)
         )
     else:
-        bot.send_message(chat_id, "Интервал еще не установлен!")
+        markup = create_interval_keyboard()
+        msg = bot.send_message(chat_id, "Выберите интервал", reply_markup=markup)
+        bot.register_next_step_handler(
+            msg, lambda msg: update_interval_info(msg, chat_id)
+        )
 
 
 @bot.message_handler(commands=["stop"])
 def stop_notifications(message):
     chat_id = message.chat.id
     if chat_id in user_intervals:
-        is_empty = user_intervals.pop(chat_id)
-
-        msg = bot.send_message(chat_id, "Уведомления остановлены!")
+        user_intervals.pop(chat_id)
+        weather_info.pop(chat_id)
+        bot.send_message(chat_id, "Уведомления остановлены!")
 
     else:
         bot.send_message(chat_id, "Интервал еще не установлен!")
@@ -132,12 +146,7 @@ def get_city(city):
                 f"Город установлен. Теперь выберите интервал для получения погоды.",
             )
 
-            markup = types.ReplyKeyboardMarkup()
-            btn1 = types.KeyboardButton("1 минута")
-            btn2 = types.KeyboardButton("1 час")
-            btn3 = types.KeyboardButton("3 часа")
-            btn4 = types.KeyboardButton("6 часов")
-            markup.add(btn1, btn2, btn3, btn4)
+            markup = create_interval_keyboard()
             bot.send_message(city.chat.id, "Выберите интервал:", reply_markup=markup)
         else:
             bot.send_message(city.chat.id, "Город не найден!")
@@ -146,8 +155,10 @@ def get_city(city):
 
 def update_interval_info(message, chat_id):
     print(user_intervals[chat_id])
-    chat_id = message.chat.id
+    # chat_id = message.chat.id
     interval = message.text
+    isSuccess = True
+    seconds = 3600
     if interval == "1 минута":
         seconds = 60
     elif interval == "1 час":
@@ -156,8 +167,18 @@ def update_interval_info(message, chat_id):
         seconds = 10800
     elif interval == "6 часов":
         seconds = 21600
+    else:
+
+        isSuccess = False
+
     user_intervals[chat_id] = seconds
-    bot.send_message(chat_id, "Интервал обновлен")
+    if isSuccess:
+        bot.send_message(chat_id, "Интервал обновлен")
+    else:
+        bot.send_message(
+            chat_id,
+            "Введено некорректное значение интервала! Интервал установлен на 1 час",
+        )
     threading.Thread(target=send_weather_periodically, args=(chat_id,)).start()
     print(user_intervals[chat_id])
 
@@ -182,6 +203,14 @@ def send_weather_periodically(chat_id):
             weather_now = weatherAPI.weather(info["lat"], info["lon"])
             bot.send_message(chat_id, f'Сейчас в {info["city_name"]}: {weather_now} °C')
         time.sleep(user_intervals[chat_id])
+
+
+def create_interval_keyboard():
+    markup = types.ReplyKeyboardMarkup()
+    intervals = ["1 минута", "1 час", "3 часа", "6 часов"]
+    for interval in intervals:
+        markup.add(types.KeyboardButton(interval))
+    return markup
 
 
 bot.polling(none_stop=True, interval=0)
